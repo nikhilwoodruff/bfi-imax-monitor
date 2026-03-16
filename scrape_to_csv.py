@@ -1,15 +1,16 @@
-"""Scrape BFI IMAX seat availability and append to CSV files.
+"""Scrape BFI IMAX seat availability for all upcoming screenings.
 
-Reads performances from config.json, scrapes each one, and writes
-results to data/{performance_id}.csv. Designed to run in GitHub Actions
-on a schedule.
+Auto-discovers all films and performances from the BFI IMAX calendar,
+then scrapes seat availability for each. Results go to data/{performance_id}.csv.
+Designed to run in GitHub Actions on a schedule.
 """
 
 import asyncio
 import csv
 import json
 import os
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,7 +20,7 @@ load_dotenv()
 
 BASE_URL = "https://whatson.bfi.org.uk/imax/Online"
 DATA_DIR = Path("data")
-CONFIG_PATH = Path("config.json")
+SEARCH_ID = "49C49C83-6BA0-420C-A784-9B485E36E2E0"
 
 STATUS_MAP = {
     "A": "available",
@@ -27,6 +28,7 @@ STATUS_MAP = {
     "U": "unavailable",
     "u": "unavailable",
     "s": "selected",
+    "O": "other",
 }
 
 CSV_FIELDS = [
@@ -37,6 +39,14 @@ CSV_FIELDS = [
     "is_wheelchair",
     "description",
 ]
+
+# searchResults column indices (from searchHeaders in articleContext)
+COL_ID = 0          # performance/article GUID
+COL_NAME = 4        # film permalink slug
+COL_TIME = 8        # screening time
+COL_DATE = 9        # screening date
+COL_MONTH = 10      # screening month
+COL_YEAR = 11       # screening year
 
 
 async def login(page: Page):
@@ -63,6 +73,69 @@ async def login(page: Page):
         print("Login submitted")
     except Exception as e:
         print(f"Login failed: {e}")
+
+
+async def discover_performances(page: Page, days_ahead: int = 30) -> list[dict]:
+    """Discover all upcoming screenings from the BFI IMAX calendar search."""
+    today = datetime.now()
+    end = today + timedelta(days=days_ahead)
+    from_str = f"{today.year}-{today.month}-{today.day}"
+    to_str = f"{end.year}-{end.month}-{end.day}"
+
+    search_url = (
+        f"{BASE_URL}/default.asp?"
+        f"doWork%3A%3AWScontent%3A%3Asearch=1&"
+        f"BOparam%3A%3AWScontent%3A%3Asearch%3A%3Aarticle_search_id={SEARCH_ID}&"
+        f"BOset%3A%3AWScontent%3A%3ASearchCriteria%3A%3Asearch_from={from_str}&"
+        f"BOset%3A%3AWScontent%3A%3ASearchCriteria%3A%3Asearch_to={to_str}"
+    )
+    print(f"Discovering screenings {from_str} to {to_str}...")
+    await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+    await page.wait_for_timeout(5000)
+
+    # Extract the embedded searchResults JS array from the page HTML
+    html = await page.content()
+    sr_match = re.search(
+        r"searchResults\s*:\s*(\[.+?\])\s*,\s*searchResultsColumns",
+        html,
+        re.DOTALL,
+    )
+    if not sr_match:
+        print("Could not find searchResults in page — trying JS eval fallback")
+        # Try from JS scope
+        data = await page.evaluate("""
+            () => typeof articleContext !== 'undefined' ? articleContext.searchResults : null
+        """)
+        if not data:
+            print("No searchResults found")
+            return []
+    else:
+        data = json.loads(sr_match.group(1))
+
+    # Also extract the film titles from the rendered page (Buy button aria-labels)
+    labels = await page.evaluate("""
+        () => [...document.querySelectorAll('a[aria-label]')]
+            .filter(a => a.textContent.trim() === 'Buy')
+            .map(a => a.getAttribute('aria-label'))
+    """)
+
+    performances = []
+    for i, item in enumerate(data):
+        perf_id = item[COL_ID]
+        slug = item[COL_NAME]
+        # Build a label from the Buy button aria-label if available
+        label = labels[i] if i < len(labels) else slug
+        # Clean up label: "Buy, Project Hail Mary, Saturday 21 March 2026 13:30" → drop "Buy, "
+        if label and label.startswith("Buy, "):
+            label = label[5:]
+
+        performances.append({
+            "performance_id": perf_id,
+            "film_slug": slug,
+            "label": label,
+        })
+
+    return performances
 
 
 async def scrape_performance(page: Page, performance_id: str) -> list[dict]:
@@ -119,7 +192,6 @@ def update_index(performances: list[dict], now: str):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     index_path = DATA_DIR / "index.json"
 
-    # Load existing index or start fresh
     if index_path.exists():
         index = json.loads(index_path.read_text())
     else:
@@ -139,14 +211,7 @@ def update_index(performances: list[dict], now: str):
 
 
 async def main():
-    config = json.loads(CONFIG_PATH.read_text())
-    performances = config["performances"]
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    print(f"Scraping {len(performances)} performance(s) at {now}")
-
-    # Use headed mode with xvfb in CI — Cloudflare blocks headless Chrome
-    is_ci = os.getenv("CI") == "true"
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -171,6 +236,15 @@ async def main():
 
         await login(page)
 
+        # Auto-discover all upcoming screenings
+        performances = await discover_performances(page)
+        print(f"Found {len(performances)} screening(s)")
+
+        if not performances:
+            print("No screenings found — exiting")
+            await browser.close()
+            return
+
         for perf in performances:
             pid = perf["performance_id"]
             label = perf.get("label", perf["film_slug"])
@@ -192,7 +266,10 @@ async def main():
                 print(f"    {len(seats)} seats: {by_status}")
             except Exception as e:
                 print(f"    Error: {e}")
-                await page.screenshot(path=f"debug_{pid[:8]}.png")
+                try:
+                    await page.screenshot(path=f"debug_{pid[:8]}.png")
+                except Exception:
+                    pass
 
         update_index(performances, now)
         await browser.close()
