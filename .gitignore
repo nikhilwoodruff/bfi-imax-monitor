@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+debug_*.html
+debug_*.png
+debug_*.json

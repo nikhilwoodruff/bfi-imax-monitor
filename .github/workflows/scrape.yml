@@ -1,0 +1,39 @@
+name: Scrape BFI IMAX seats
+
+on:
+  schedule:
+    - cron: "*/30 * * * *" # every 30 minutes
+  workflow_dispatch: # manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Scrape seats
+        env:
+          BFI_EMAIL: ${{ secrets.BFI_EMAIL }}
+          BFI_PASSWORD: ${{ secrets.BFI_PASSWORD }}
+        run: xvfb-run uv run python scrape_to_csv.py
+
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
