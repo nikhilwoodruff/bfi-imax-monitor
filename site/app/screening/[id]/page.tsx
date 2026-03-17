@@ -5,6 +5,11 @@ import AvailabilityChart from "@/components/availability-chart";
 
 export const revalidate = 120;
 
+export async function generateStaticParams() {
+  const index = await fetchIndex();
+  return Object.keys(index).map((id) => ({ id }));
+}
+
 interface Props {
   params: Promise<{ id: string }>;
 }
