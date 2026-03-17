@@ -6,28 +6,31 @@ const PASSWORD = "odyssey";
 const STORAGE_KEY = "bfi-imax-auth";
 
 export default function PasswordGate({ children }: { children: React.ReactNode }) {
-  const [authenticated, setAuthenticated] = useState(false);
+  const [state, setState] = useState<"loading" | "locked" | "unlocked">("loading");
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem(STORAGE_KEY) === "1") {
-      setAuthenticated(true);
-    }
+    setState(sessionStorage.getItem(STORAGE_KEY) === "1" ? "unlocked" : "locked");
   }, []);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (input === PASSWORD) {
       sessionStorage.setItem(STORAGE_KEY, "1");
-      setAuthenticated(true);
+      setState("unlocked");
     } else {
       setError(true);
       setInput("");
     }
   }
 
-  if (authenticated) return <>{children}</>;
+  // Hide everything until JS hydrates
+  if (state === "loading") {
+    return <div style={{ visibility: "hidden" }}>{children}</div>;
+  }
+
+  if (state === "unlocked") return <>{children}</>;
 
   return (
     <div
