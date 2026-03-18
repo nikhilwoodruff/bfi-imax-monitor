@@ -115,7 +115,17 @@ function parseLabel(label: string): { filmName: string; dateStr: string; timeStr
   // Clean up film name - remove "- " prefix from older labels
   if (filmName.startsWith("- ")) filmName = filmName.slice(2);
 
-  return { filmName, dateStr, timeStr, date };
+  // Normalise: strip "Preview: ", "Special Preview: ", subtitle/deaf parentheticals, trailing date/time
+  filmName = filmName.replace(/^(?:Special\s+)?Preview:\s*/i, "");
+  filmName = filmName.replace(/\s*\(with subtitles[^)]*\)/i, "");
+  filmName = filmName.replace(/\s*-\s*\w{3}\s+\d{1,2}\s+\w{3}\s+\d{1,2}:\d{2}$/, ""); // "- Sat 21 Mar 13:30"
+
+  return { filmName: filmName.trim(), dateStr, timeStr, date };
+}
+
+function isSlugLabel(label: string): boolean {
+  // Labels that are just slugs (contain underscores) rather than human-readable names
+  return /_/.test(label.split(",")[0]);
 }
 
 export async function fetchIndex(): Promise<PerformanceIndex> {
@@ -172,7 +182,7 @@ export async function fetchAllSummaries(): Promise<PerformanceSummary[]> {
   const index = await fetchIndex();
   const summaries: PerformanceSummary[] = [];
 
-  const entries = Object.entries(index);
+  const entries = Object.entries(index).filter(([, meta]) => !isSlugLabel(meta.label));
   // Fetch all CSVs in parallel
   const results = await Promise.allSettled(
     entries.map(async ([id, meta]) => {
