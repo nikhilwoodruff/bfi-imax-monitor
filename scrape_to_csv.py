@@ -234,7 +234,7 @@ async def main():
         )
         page = await context.new_page()
 
-        await login(page)
+        # Skip login — scraping works without it and repeated logins risk account lockout
 
         # Auto-discover all upcoming screenings
         performances = await discover_performances(page)
