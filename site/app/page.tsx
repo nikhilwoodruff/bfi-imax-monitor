@@ -86,7 +86,12 @@ function ScreeningCard({ perf }: { perf: PerformanceSummary }) {
 }
 
 export default async function Home() {
-  const summaries = await fetchAllSummaries();
+  const all = await fetchAllSummaries();
+  // Only list screenings from today onwards — the index keeps everything ever
+  // tracked, so without this the page opens on months of past showings
+  const cutoff = new Date();
+  cutoff.setUTCHours(0, 0, 0, 0);
+  const summaries = all.filter((s) => s.date >= cutoff);
   const groups = groupByFilm(summaries);
 
   const totalAvailable = summaries.reduce((n, s) => n + s.available, 0);
