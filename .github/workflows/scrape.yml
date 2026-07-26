@@ -1,14 +1,24 @@
 name: Scrape BFI IMAX seats
 
 on:
-  workflow_dispatch: # manual trigger only while testing the Cloudflare fix
+  schedule:
+    - cron: "*/30 * * * *" # every 30 minutes
+  workflow_dispatch: # manual trigger
 
 permissions:
-  contents: read
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.commit.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,6 +27,14 @@ jobs:
             pyproject.toml
             uv.lock
           sparse-checkout-cone-mode: false
+
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: datastore
+
+      - name: Link data dir
+        run: ln -s "$GITHUB_WORKSPACE/datastore/data" data
 
       - uses: astral-sh/setup-uv@v4
         with:
@@ -34,8 +52,24 @@ jobs:
           BFI_PASSWORD: ${{ secrets.BFI_PASSWORD }}
         run: xvfb-run uv run python scrape_to_csv.py
 
-      - name: Report what would be committed (dry run)
+      - name: Commit data
+        id: commit
+        working-directory: datastore
         run: |
-          echo "Files written to data/:"
-          ls -la data/ | head -20
-          echo "Total files: $(ls data/ | wc -l)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            # amend + force push keeps the data branch at a single commit,
+            # so repo history never grows with data snapshots
+            git commit --amend -m "data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push --force origin HEAD:data
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: scrape
+    if: needs.scrape.outputs.has_changes == 'true'
+    uses: ./.github/workflows/deploy-site.yml
