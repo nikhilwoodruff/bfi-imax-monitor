@@ -7,6 +7,7 @@ Designed to run in GitHub Actions on a schedule.
 
 import asyncio
 import csv
+import sys
 import json
 import os
 import re
@@ -91,6 +92,14 @@ async def discover_performances(page: Page, days_ahead: int = 30) -> list[dict]:
     )
     print(f"Discovering screenings {from_str} to {to_str}...")
     await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+
+    # Wait out the Cloudflare managed challenge if served one
+    for _ in range(30):
+        title = await page.title()
+        if "just a moment" not in title.lower():
+            break
+        await page.wait_for_timeout(3000)
+    print(f"Page title: {await page.title()!r}")
     await page.wait_for_timeout(5000)
 
     # Extract the embedded searchResults JS array from the page HTML
@@ -216,17 +225,13 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
+            channel="chrome",
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
             ],
         )
         context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
             viewport={"width": 1920, "height": 1080},
         )
         await context.add_init_script(
@@ -241,9 +246,9 @@ async def main():
         print(f"Found {len(performances)} screening(s)")
 
         if not performances:
-            print("No screenings found — exiting")
+            print("No screenings found — failing so this is visible in CI")
             await browser.close()
-            return
+            sys.exit(1)
 
         for perf in performances:
             pid = perf["performance_id"]
