@@ -44,10 +44,12 @@ CSV_FIELDS = [
 # searchResults column indices (from searchHeaders in articleContext)
 COL_ID = 0          # performance/article GUID
 COL_NAME = 4        # film permalink slug
+COL_TITLE = 5       # film display title ("Description")
 COL_TIME = 8        # screening time
 COL_DATE = 9        # screening date
-COL_MONTH = 10      # screening month
+COL_MONTH = 10      # screening month (zero-based)
 COL_YEAR = 11       # screening year
+COL_AVAILABILITY = 15  # sales status: S = sold out
 
 
 async def wait_out_challenge(page: Page):
@@ -126,27 +128,24 @@ async def discover_performances(page: Page, days_ahead: int = 30) -> list[dict]:
         print("No searchResults found")
         return []
 
-    # Also extract the film titles from the rendered page (Buy button aria-labels)
-    labels = await page.evaluate("""
-        () => [...document.querySelectorAll('a[aria-label]')]
-            .filter(a => a.textContent.trim() === 'Buy')
-            .map(a => a.getAttribute('aria-label'))
-    """)
-
     performances = []
-    for i, item in enumerate(data):
+    for item in data:
         perf_id = item[COL_ID]
         slug = item[COL_NAME]
-        # Build a label from the Buy button aria-label if available
-        label = labels[i] if i < len(labels) else slug
-        # Clean up label: "Buy, Project Hail Mary, Saturday 21 March 2026 13:30" → drop "Buy, "
-        if label and label.startswith("Buy, "):
-            label = label[5:]
+        # Build the label from the result columns ("The Odyssey, Sunday 26 July 2026 16:30").
+        # The old approach harvested Buy-button aria-labels, but sold-out rows have no
+        # Buy button so the positional alignment breaks.
+        try:
+            dt = datetime(int(item[COL_YEAR]), int(item[COL_MONTH]) + 1, int(item[COL_DATE]))
+            label = f"{item[COL_TITLE]}, {dt.strftime('%A %-d %B %Y')} {item[COL_TIME]}"
+        except (ValueError, IndexError, TypeError):
+            label = slug
 
         performances.append({
             "performance_id": perf_id,
             "film_slug": slug,
             "label": label,
+            "listed_sold_out": str(item[COL_AVAILABILITY]).upper() == "S" if len(item) > COL_AVAILABILITY else False,
         })
 
     return performances
@@ -228,6 +227,10 @@ def update_index(performances: list[dict], now: str, sold_out: dict[str, bool] |
                 "first_scraped": now,
             }
         index[pid]["last_scraped"] = now
+        # upgrade slug-only labels (e.g. from runs where the title was unavailable)
+        new_label = perf.get("label", "")
+        if "_" in index[pid]["label"].split(",")[0] and "_" not in new_label.split(",")[0]:
+            index[pid]["label"] = new_label
         if sold_out and pid in sold_out:
             index[pid]["sold_out"] = sold_out[pid]
 
@@ -270,6 +273,11 @@ async def main():
             pid = perf["performance_id"]
             label = perf.get("label", perf["film_slug"])
             print(f"  Scraping {label} ({pid[:8]})...")
+
+            if perf.get("listed_sold_out"):
+                print("    Listed as sold out in search results — skipping map")
+                sold_out_map[pid] = True
+                continue
 
             try:
                 seats, sold_out = await scrape_performance(page, pid)
