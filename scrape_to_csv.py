@@ -50,6 +50,15 @@ COL_MONTH = 10      # screening month
 COL_YEAR = 11       # screening year
 
 
+async def wait_out_challenge(page: Page):
+    """Wait for a Cloudflare managed challenge to clear, if one is served."""
+    for _ in range(30):
+        title = await page.title()
+        if "just a moment" not in title.lower():
+            return
+        await page.wait_for_timeout(3000)
+
+
 async def login(page: Page):
     email = os.getenv("BFI_EMAIL")
     password = os.getenv("BFI_PASSWORD")
@@ -92,34 +101,30 @@ async def discover_performances(page: Page, days_ahead: int = 30) -> list[dict]:
     )
     print(f"Discovering screenings {from_str} to {to_str}...")
     await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
-
-    # Wait out the Cloudflare managed challenge if served one
-    for _ in range(30):
-        title = await page.title()
-        if "just a moment" not in title.lower():
-            break
-        await page.wait_for_timeout(3000)
+    await wait_out_challenge(page)
     print(f"Page title: {await page.title()!r}")
-    await page.wait_for_timeout(5000)
 
-    # Extract the embedded searchResults JS array from the page HTML
-    html = await page.content()
-    sr_match = re.search(
-        r"searchResults\s*:\s*(\[.+?\])\s*,\s*searchResultsColumns",
-        html,
-        re.DOTALL,
-    )
-    if not sr_match:
-        print("Could not find searchResults in page — trying JS eval fallback")
-        # Try from JS scope
+    # Extract the embedded searchResults JS array, retrying while the page renders
+    data = None
+    for _ in range(10):
+        await page.wait_for_timeout(3000)
+        html = await page.content()
+        sr_match = re.search(
+            r"searchResults\s*:\s*(\[.+?\])\s*,\s*searchResultsColumns",
+            html,
+            re.DOTALL,
+        )
+        if sr_match:
+            data = json.loads(sr_match.group(1))
+            break
         data = await page.evaluate("""
             () => typeof articleContext !== 'undefined' ? articleContext.searchResults : null
         """)
-        if not data:
-            print("No searchResults found")
-            return []
-    else:
-        data = json.loads(sr_match.group(1))
+        if data:
+            break
+    if not data:
+        print("No searchResults found")
+        return []
 
     # Also extract the film titles from the rendered page (Buy button aria-labels)
     labels = await page.evaluate("""
@@ -147,9 +152,17 @@ async def discover_performances(page: Page, days_ahead: int = 30) -> list[dict]:
     return performances
 
 
-async def scrape_performance(page: Page, performance_id: str) -> list[dict]:
+async def scrape_performance(page: Page, performance_id: str) -> tuple[list[dict], bool]:
+    """Returns (seats, sold_out). Sold-out screenings render no seat map at all."""
     url = f"{BASE_URL}/mapSelect.asp?BOparam::WSmap::loadMap::performance_ids={performance_id}"
     await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    await wait_out_challenge(page)
+
+    sold_out = await page.evaluate(
+        "() => document.body.innerText.includes('no available seats')"
+    )
+    if sold_out:
+        return [], True
 
     try:
         await page.wait_for_selector("svg circle[data-status]", timeout=30000)
@@ -196,7 +209,7 @@ def append_to_csv(performance_id: str, seats: list[dict], now: str):
             })
 
 
-def update_index(performances: list[dict], now: str):
+def update_index(performances: list[dict], now: str, sold_out: dict[str, bool] | None = None):
     """Write/update data/index.json with metadata about tracked performances."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     index_path = DATA_DIR / "index.json"
@@ -215,6 +228,8 @@ def update_index(performances: list[dict], now: str):
                 "first_scraped": now,
             }
         index[pid]["last_scraped"] = now
+        if sold_out and pid in sold_out:
+            index[pid]["sold_out"] = sold_out[pid]
 
     index_path.write_text(json.dumps(index, indent=2) + "\n")
 
@@ -250,13 +265,19 @@ async def main():
             await browser.close()
             sys.exit(1)
 
+        sold_out_map = {}
         for perf in performances:
             pid = perf["performance_id"]
             label = perf.get("label", perf["film_slug"])
             print(f"  Scraping {label} ({pid[:8]})...")
 
             try:
-                seats = await scrape_performance(page, pid)
+                seats, sold_out = await scrape_performance(page, pid)
+                sold_out_map[pid] = sold_out
+
+                if sold_out:
+                    print("    Sold out — no seat map rendered")
+                    continue
 
                 if not seats:
                     print("    No seats found — saving debug screenshot")
@@ -271,12 +292,8 @@ async def main():
                 print(f"    {len(seats)} seats: {by_status}")
             except Exception as e:
                 print(f"    Error: {e}")
-                try:
-                    await page.screenshot(path=f"debug_{pid[:8]}.png")
-                except Exception:
-                    pass
 
-        update_index(performances, now)
+        update_index(performances, now, sold_out_map)
         await browser.close()
 
     print("Done")
