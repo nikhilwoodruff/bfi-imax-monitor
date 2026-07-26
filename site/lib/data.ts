@@ -196,8 +196,11 @@ export async function fetchAllSummaries(): Promise<PerformanceSummary[]> {
       // A sold-out screening renders no seat map, so the last snapshot is stale:
       // report zero availability and treat every seat as sold
       const soldOut = meta.sold_out === true;
+      // With no snapshot (sold out before a successful scrape), fall back to the
+      // venue capacity so the listing reads 100% sold rather than 0% of 0
+      const capacity = Object.values(SEATS_PER_ROW).reduce((a, b) => a + b, 0);
       const available = soldOut ? 0 : seats.filter((s) => s.status === "available").length;
-      const sold = soldOut ? seats.length : seats.filter((s) => s.status === "sold").length;
+      const sold = soldOut ? (seats.length || capacity) : seats.filter((s) => s.status === "sold").length;
       const primeAvailable = soldOut ? 0 : seats.filter(
         (s) => s.status === "available" && isPrimeSeat(s.row, s.seat)
       ).length;
@@ -213,7 +216,7 @@ export async function fetchAllSummaries(): Promise<PerformanceSummary[]> {
         lastScraped: meta.last_scraped,
         available,
         sold,
-        total: seats.length,
+        total: soldOut ? (seats.length || capacity) : seats.length,
         primeAvailable,
       } satisfies PerformanceSummary;
     })
