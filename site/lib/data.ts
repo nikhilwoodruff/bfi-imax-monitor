@@ -137,6 +137,9 @@ export async function fetchIndex(): Promise<PerformanceIndex> {
 
 export async function fetchSeats(performanceId: string): Promise<SeatRow[]> {
   const res = await fetch(`${RAW}/data/${performanceId}.csv`, { next: { revalidate: 120 } });
+  // Newly-discovered screenings (e.g. ones that sold out before a successful
+  // scrape) are in the index but have no CSV yet
+  if (res.status === 404) return [];
   if (!res.ok) throw new Error(`Failed to fetch seats: ${res.status}`);
   const text = await res.text();
   const parsed = Papa.parse<SeatRow>(text, { header: true, skipEmptyLines: true });
