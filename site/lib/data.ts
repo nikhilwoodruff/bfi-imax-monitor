@@ -98,7 +98,8 @@ function parseLabel(label: string): { filmName: string; dateStr: string; timeStr
   let filmName = label;
   let dateStr = "";
   let timeStr = "";
-  let date = new Date();
+  // Default to epoch, not now: a label we can't date must not pass "upcoming" filters
+  let date = new Date(0);
 
   if (commaIdx > 0) {
     filmName = label.slice(0, commaIdx).trim();
