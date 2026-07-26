@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 
 const REPO = "nikhilwoodruff/bfi-imax-monitor";
-const BRANCH = "main";
+const BRANCH = "data";
 const RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}`;
 
 export interface PerformanceIndex {
