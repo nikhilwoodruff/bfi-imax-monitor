@@ -4,3 +4,5 @@ __pycache__/
 debug_*.html
 debug_*.png
 debug_*.json
+data/
+datastore/
