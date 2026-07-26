@@ -10,6 +10,7 @@ export interface PerformanceIndex {
     label: string;
     first_scraped: string;
     last_scraped: string;
+    sold_out?: boolean;
   };
 }
 
@@ -186,12 +187,15 @@ export async function fetchAllSummaries(): Promise<PerformanceSummary[]> {
   // Fetch all CSVs in parallel
   const results = await Promise.allSettled(
     entries.map(async ([id, meta]) => {
-      const seatRows = await fetchSeats(id);
+      const seatRows = await fetchSeats(id).catch(() => [] as SeatRow[]);
       const seats = getLatestSnapshot(seatRows);
       const { filmName, dateStr, timeStr, date } = parseLabel(meta.label);
-      const available = seats.filter((s) => s.status === "available").length;
-      const sold = seats.filter((s) => s.status === "sold").length;
-      const primeAvailable = seats.filter(
+      // A sold-out screening renders no seat map, so the last snapshot is stale:
+      // report zero availability and treat every seat as sold
+      const soldOut = meta.sold_out === true;
+      const available = soldOut ? 0 : seats.filter((s) => s.status === "available").length;
+      const sold = soldOut ? seats.length : seats.filter((s) => s.status === "sold").length;
+      const primeAvailable = soldOut ? 0 : seats.filter(
         (s) => s.status === "available" && isPrimeSeat(s.row, s.seat)
       ).length;
 
