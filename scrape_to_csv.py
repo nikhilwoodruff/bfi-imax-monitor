@@ -180,7 +180,7 @@ async def scrape_performance(page: Page, performance_id: str) -> tuple[list[dict
             }));
         }
     """)
-    return raw
+    return raw, False
 
 
 def append_to_csv(performance_id: str, seats: list[dict], now: str):
@@ -269,6 +269,8 @@ async def main():
             sys.exit(1)
 
         sold_out_map = {}
+        successful = []
+        failed = []
         for perf in performances:
             pid = perf["performance_id"]
             label = perf.get("label", perf["film_slug"])
@@ -277,21 +279,25 @@ async def main():
             if perf.get("listed_sold_out"):
                 print("    Listed as sold out in search results — skipping map")
                 sold_out_map[pid] = True
+                successful.append(perf)
                 continue
 
             try:
                 seats, sold_out = await scrape_performance(page, pid)
-                sold_out_map[pid] = sold_out
-
                 if sold_out:
                     print("    Sold out — no seat map rendered")
+                    sold_out_map[pid] = True
+                    successful.append(perf)
                     continue
 
                 if not seats:
                     print("    No seats found — saving debug screenshot")
                     await page.screenshot(path=f"debug_{pid[:8]}.png")
+                    raise RuntimeError("No seat map found for a screening not marked sold out")
 
                 append_to_csv(pid, seats, now)
+                sold_out_map[pid] = False
+                successful.append(perf)
 
                 by_status = {}
                 for s in seats:
@@ -300,10 +306,13 @@ async def main():
                 print(f"    {len(seats)} seats: {by_status}")
             except Exception as e:
                 print(f"    Error: {e}")
+                failed.append(pid)
 
-        update_index(performances, now, sold_out_map)
+        update_index(successful, now, sold_out_map)
         await browser.close()
 
+    if failed:
+        raise RuntimeError(f"Failed to scrape {len(failed)} screening(s): {', '.join(failed)}")
     print("Done")
 
 
