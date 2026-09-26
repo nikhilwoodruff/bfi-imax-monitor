@@ -1,6 +1,13 @@
 "use client";
 
-import { Seat, ROW_ORDER, seatsInRow, maxSeatsInAnyRow, isPrimeSeat, seatScore } from "@/lib/data";
+import {
+  Seat,
+  ROW_ORDER,
+  seatsInRow,
+  maxSeatsInAnyRow,
+  isPrimeSeat,
+  seatScore,
+} from "@/lib/data";
 import { useState } from "react";
 
 interface SeatMapProps {
@@ -22,7 +29,8 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
   const gap = compact ? 1 : 2;
   const rowLabelWidth = compact ? 14 : 20;
   const svgWidth = rowLabelWidth + maxSeats * (seatSize + gap) + 20;
-  const svgHeight = ROW_ORDER.length * (seatSize + gap + (compact ? 1 : 2)) + 40;
+  const svgHeight =
+    ROW_ORDER.length * (seatSize + gap + (compact ? 1 : 2)) + 40;
 
   return (
     <div className="relative">
@@ -32,7 +40,8 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
           className="h-[2px] rounded-full"
           style={{
             width: compact ? "60%" : "70%",
-            background: "linear-gradient(90deg, transparent, var(--accent-gold-dim), var(--accent-gold), var(--accent-gold-dim), transparent)",
+            background:
+              "linear-gradient(90deg, transparent, var(--accent-gold-dim), var(--accent-gold), var(--accent-gold-dim), transparent)",
           }}
         />
       </div>
@@ -54,7 +63,7 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
         >
           {ROW_ORDER.map((row, rowIdx) => {
             const count = seatsInRow(row);
-            const offset = (maxSeats - count) / 2 * (seatSize + gap);
+            const offset = ((maxSeats - count) / 2) * (seatSize + gap);
             const y = rowIdx * (seatSize + gap + (compact ? 1 : 2)) + 4;
 
             return (
@@ -82,8 +91,10 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
                   const wheelchair = seat?.isWheelchair || false;
 
                   let fill = "var(--seat-unavailable)";
-                  if (status === "available" && prime) fill = "var(--seat-prime)";
-                  else if (status === "available") fill = "var(--seat-available)";
+                  if (status === "available" && prime)
+                    fill = "var(--seat-prime)";
+                  else if (status === "available")
+                    fill = "var(--seat-available)";
                   else if (status === "sold") fill = "var(--seat-sold)";
 
                   let opacity = 1;
@@ -102,6 +113,9 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
                       opacity={opacity}
                       className="transition-opacity duration-150"
                       style={{ cursor: "pointer" }}
+                      role="img"
+                      aria-label={`Row ${row}, seat ${seatNum}: ${status}${prime ? ", prime position" : ""}${wheelchair ? ", wheelchair" : ""}`}
+                      onClick={() => seat && setHoveredSeat(seat)}
                       onMouseEnter={() => seat && setHoveredSeat(seat)}
                       onMouseLeave={() => setHoveredSeat(null)}
                     />
@@ -124,7 +138,8 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
           }}
         >
           <span style={{ color: "var(--text-primary)" }}>
-            {hoveredSeat.row}{hoveredSeat.seat}
+            {hoveredSeat.row}
+            {hoveredSeat.seat}
           </span>
           <span style={{ color: "var(--text-muted)" }}> &middot; </span>
           <span
@@ -135,8 +150,8 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
                     ? "var(--accent-gold)"
                     : "var(--accent-green)"
                   : hoveredSeat.status === "sold"
-                  ? "var(--accent-red)"
-                  : "var(--text-muted)",
+                    ? "var(--accent-red)"
+                    : "var(--text-muted)",
             }}
           >
             {hoveredSeat.status}
@@ -144,34 +159,54 @@ export default function SeatMap({ seats, compact = false }: SeatMapProps) {
           {hoveredSeat.isWheelchair && (
             <span style={{ color: "var(--text-muted)" }}> (wheelchair)</span>
           )}
-          {isPrimeSeat(hoveredSeat.row, hoveredSeat.seat) && hoveredSeat.status === "available" && (
-            <>
-              <br />
-              <span style={{ color: "var(--accent-gold)" }}>
-                score: {(seatScore(hoveredSeat.row, hoveredSeat.seat) * 100).toFixed(0)}%
-              </span>
-            </>
-          )}
+          {isPrimeSeat(hoveredSeat.row, hoveredSeat.seat) &&
+            hoveredSeat.status === "available" && (
+              <>
+                <br />
+                <span style={{ color: "var(--accent-gold)" }}>
+                  score:{" "}
+                  {(seatScore(hoveredSeat.row, hoveredSeat.seat) * 100).toFixed(
+                    0,
+                  )}
+                  %
+                </span>
+              </>
+            )}
         </div>
       )}
 
       {/* Legend */}
       {!compact && (
-        <div className="flex justify-center gap-5 mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
+        <div
+          className="flex flex-wrap justify-center gap-5 mt-4 text-xs"
+          style={{ color: "var(--text-muted)" }}
+        >
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "var(--seat-prime)" }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{ background: "var(--seat-prime)" }}
+            />
             prime
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "var(--seat-available)" }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{ background: "var(--seat-available)" }}
+            />
             available
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "var(--seat-sold)" }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{ background: "var(--seat-sold)" }}
+            />
             sold
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "var(--seat-unavailable)", opacity: 0.4 }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{ background: "var(--seat-unavailable)", opacity: 0.4 }}
+            />
             n/a
           </span>
         </div>
