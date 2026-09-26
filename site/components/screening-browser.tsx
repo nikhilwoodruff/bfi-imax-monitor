@@ -42,9 +42,7 @@ export default function ScreeningBrowser({
     <div className="screening-browser">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">THE BIG SCREEN, WITH A BETTER SEAT</div>
           <h1>Upcoming screenings</h1>
-          <p>Find your film. Find your seat. Make a night of it.</p>
         </div>
         <a
           className="button button-primary"
@@ -52,7 +50,7 @@ export default function ScreeningBrowser({
           target="_blank"
           rel="noopener noreferrer"
         >
-          Explore BFI IMAX <span aria-hidden="true">↗</span>
+          BFI IMAX website <span aria-hidden="true">↗</span>
         </a>
       </div>
       <section className="stats-grid" aria-label="Availability overview">
@@ -70,7 +68,7 @@ export default function ScreeningBrowser({
             Seats available <span className="status-dot" />
           </span>
           <strong>{available.toLocaleString()}</strong>
-          <small>Room for your next cinema trip</small>
+          <small>Across all tracked screenings</small>
         </div>
         <div className="stat">
           <span>
@@ -85,7 +83,7 @@ export default function ScreeningBrowser({
       </section>
       <div className="section-heading">
         <h2>
-          What’s showing <span className="count-badge">{films}</span>
+          Films <span className="count-badge">{films}</span>
         </h2>
         {latest && (
           <span className="updated">
@@ -160,7 +158,7 @@ export default function ScreeningBrowser({
         {filtered.length} {filtered.length === 1 ? "screening" : "screenings"}
         {filter !== "all" || query
           ? " matching your filters"
-          : " to look forward to"}
+          : ""}
       </div>
       {groups.size === 0 ? (
         <div className="empty-state">
@@ -168,12 +166,12 @@ export default function ScreeningBrowser({
           <h3>
             {screenings.length
               ? "No matching screenings"
-              : "Nothing on the horizon just yet"}
+              : "No upcoming screenings"}
           </h3>
           <p>
             {screenings.length
               ? "Try another film or adjust your availability filter."
-              : "Upcoming screenings will appear here when they’re tracked."}
+              : "No upcoming screenings are currently tracked."}
           </p>
           {screenings.length > 0 && (
             <button
@@ -281,9 +279,8 @@ export default function ScreeningBrowser({
       <div className="info-note">
         <span aria-hidden="true">ⓘ</span>
         <p>
-          <strong>A note on prime seats</strong> Prime seats are central
+          <strong>Prime seats</strong> Prime seats are central
           positions in the preferred rows, based on the tracker’s seating score.
-          Check the seat map for a closer look.
         </p>
       </div>
     </div>

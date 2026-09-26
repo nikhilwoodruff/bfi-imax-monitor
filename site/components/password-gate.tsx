@@ -62,7 +62,7 @@ export default function PasswordGate({
           BFI IMAX Monitor
         </h1>
         <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-          Your next big-screen moment starts here.
+          Enter the password to continue.
         </p>
         <input
           type="password"

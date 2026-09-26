@@ -15,7 +15,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <span className="brand-mark">bfi</span>
           <span>
             IMAX monitor
-            <span className="brand-caption">Your cinema, at a glance</span>
           </span>
         </Link>
         <div className="nav-label">WORKSPACE</div>
@@ -31,11 +30,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
         </nav>
-        <div className="sidebar-note">
-          <span className="tiny-label">A BETTER VIEW</span>
-          <p>Find your next big-screen moment.</p>
-          <span>Explore availability and find the best seats at BFI IMAX.</span>
-        </div>
         <div className="sidebar-bottom">
           <a
             href="https://www.bfi.org.uk/bfi-imax"
@@ -73,7 +67,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
         <footer className="page-footer">
           Independent tracker. Availability may change before booking.
-          <span>Made for the big screen.</span>
         </footer>
       </div>
     </div>
