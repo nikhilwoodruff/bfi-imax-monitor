@@ -1,24 +1,37 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useSyncExternalStore, FormEvent } from "react";
 
 const PASSWORD = "odyssey";
 const STORAGE_KEY = "bfi-imax-auth";
 
-export default function PasswordGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<"loading" | "locked" | "unlocked">("loading");
+function subscribe(onChange: () => void) {
+  window.addEventListener("bfi-auth-change", onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener("bfi-auth-change", onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+export default function PasswordGate({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const state = useSyncExternalStore(
+    subscribe,
+    () => (sessionStorage.getItem(STORAGE_KEY) === "1" ? "unlocked" : "locked"),
+    () => "loading",
+  );
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setState(sessionStorage.getItem(STORAGE_KEY) === "1" ? "unlocked" : "locked");
-  }, []);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (input === PASSWORD) {
       sessionStorage.setItem(STORAGE_KEY, "1");
-      setState("unlocked");
+      window.dispatchEvent(new Event("bfi-auth-change"));
     } else {
       setError(true);
       setInput("");
@@ -34,7 +47,7 @@ export default function PasswordGate({ children }: { children: React.ReactNode }
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center"
+      className="min-h-screen flex items-center justify-center p-5"
       style={{ background: "var(--bg-deep)" }}
     >
       <form
@@ -42,14 +55,21 @@ export default function PasswordGate({ children }: { children: React.ReactNode }
         className="rounded-lg p-8 border w-full max-w-sm"
         style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
       >
-        <h1 className="text-lg font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
+        <h1
+          className="text-lg font-semibold mb-1"
+          style={{ color: "var(--text-primary)" }}
+        >
           BFI IMAX Monitor
         </h1>
         <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-          Enter the password to continue.
+          Your next big-screen moment starts here.
         </p>
         <input
           type="password"
+          aria-label="Password"
+          aria-invalid={error}
+          aria-describedby={error ? "password-error" : undefined}
+          autoComplete="current-password"
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
@@ -65,7 +85,12 @@ export default function PasswordGate({ children }: { children: React.ReactNode }
           }}
         />
         {error && (
-          <p className="text-xs mb-3" style={{ color: "var(--accent-red)" }}>
+          <p
+            id="password-error"
+            role="alert"
+            className="text-xs mb-3"
+            style={{ color: "var(--accent-red)" }}
+          >
             Incorrect password.
           </p>
         )}
@@ -73,11 +98,11 @@ export default function PasswordGate({ children }: { children: React.ReactNode }
           type="submit"
           className="w-full rounded px-3 py-2 text-sm font-medium border-0 cursor-pointer"
           style={{
-            background: "linear-gradient(135deg, var(--accent-gold), var(--accent-gold-dim))",
+            background: "var(--text-primary)",
             color: "var(--bg-deep)",
           }}
         >
-          Enter
+          Continue
         </button>
       </form>
     </div>
