@@ -44,6 +44,7 @@ export interface PerformanceSummary {
   sold: number;
   total: number;
   primeAvailable: number;
+  seats: Seat[];
 }
 
 // BFI IMAX layout: rows A-Q (no I), seats vary per row
@@ -122,7 +123,7 @@ function parseLabel(label: string): { filmName: string; dateStr: string; timeStr
   filmName = filmName.replace(/\s*\(with subtitles[^)]*\)/i, "");
   filmName = filmName.replace(/\s*-\s*\w{3}\s+\d{1,2}\s+\w{3}\s+\d{1,2}:\d{2}$/, ""); // "- Sat 21 Mar 13:30"
 
-  return { filmName: filmName.trim(), dateStr, timeStr, date };
+  return { filmName: filmName.replace(/&nbsp;|&#160;|\u00a0/g, " ").trim(), dateStr, timeStr, date };
 }
 
 function isSlugLabel(label: string): boolean {
@@ -219,6 +220,14 @@ export async function fetchAllSummaries(): Promise<PerformanceSummary[]> {
         sold,
         total: soldOut ? (seats.length || capacity) : seats.length,
         primeAvailable,
+        // Only the upcoming list needs inline maps; omit historical seat payloads.
+        seats: date >= new Date(new Date().setUTCHours(0, 0, 0, 0))
+          ? seats.map((seat) => ({
+              ...seat,
+              description: "",
+              status: soldOut ? "sold" : seat.status,
+            }))
+          : [],
       } satisfies PerformanceSummary;
     })
   );
